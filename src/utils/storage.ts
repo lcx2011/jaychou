@@ -31,7 +31,7 @@ export async function loadSongs(): Promise<Song[]> {
 }
 
 // 改为空操作，保留签名。数据同步已在操作 API 中进行
-export function saveSongs(songs: Song[]): void {
+export function saveSongs(_songs: Song[]): void {
   // 数据已通过 api 实时写入 Supabase，此处不再写 localStorage
 }
 
