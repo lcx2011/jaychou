@@ -78,4 +78,6 @@ export type AppAction =
   | { type: 'OPEN_MODAL'; payload: { type: 'songDetail'; songId: number } }
   | { type: 'CLOSE_MODAL' }
   | { type: 'PUSH_HISTORY'; payload: { description: string; songs: Song[] } }
-  | { type: 'UNDO' };
+  | { type: 'UNDO' }
+  | { type: 'LOAD_SONGS'; payload: Song[] }        // 新增
+  | { type: 'LOAD_HISTORY'; payload: HistoryEntry[] }; // 新增

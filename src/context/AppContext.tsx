@@ -1,8 +1,9 @@
-import { createContext, useContext, useReducer, useCallback, useEffect, type ReactNode } from 'react';
-import type { AppState, AppAction, Song, SongFormData, RankFilters } from '../types';
-import { loadSongs, saveSongs } from '../utils/storage';
+import { createContext, useContext, useReducer, useCallback, useEffect, useRef, type ReactNode } from 'react';
+import type { AppAction, AppState, Song, SongFormData, RankFilters } from '../types';
 import { calculateTotal, calculateTier } from '../utils/scoring';
 import { pushToHistory } from '../utils/history';
+import * as api from '../lib/api';            // 新增 API 操作
+import { loadSongs } from '../utils/storage'; // 异步版本
 
 const EMPTY_FORM: SongFormData = {
   name: '', album: '', year: new Date().getFullYear(),
@@ -23,7 +24,7 @@ const INITIAL_FILTERS: RankFilters = {
 
 function createInitialState(): AppState {
   return {
-    songs: loadSongs(),
+    songs: [], // 不再从本地同步加载，改为异步初始化
     form: { ...EMPTY_FORM },
     isEditing: false,
     editingId: null,
@@ -77,6 +78,13 @@ function appReducer(state: AppState, action: AppAction): AppState {
         songs: [],
         historyStack: pushToHistory(state.historyStack, '清空所有数据', state.songs),
       };
+    }
+    case 'LOAD_SONGS': {
+      // 内部初始化动作，不记录历史
+      return { ...state, songs: action.payload };
+    }
+    case 'LOAD_HISTORY': {
+      return { ...state, historyStack: action.payload };
     }
     case 'SET_FORM_FIELD':
       return { ...state, form: { ...state.form, [action.payload.field]: action.payload.value } };
@@ -145,10 +153,79 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(appReducer, undefined, createInitialState);
+  const [state, baseDispatch] = useReducer(appReducer, undefined, createInitialState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
+  // 支持异步同步的 dispatch 封装
+  const dispatch = useCallback(async (action: AppAction) => {
+    // UNDO 需要先取出恢复前的快照，因为 baseDispatch 会同时更新 historyStack
+    if (action.type === 'UNDO') {
+      const current = stateRef.current;
+      if (current.historyStack.length === 0) return;
+      const lastEntry = current.historyStack[current.historyStack.length - 1];
+      const restoredSongs = lastEntry.songs;
+      baseDispatch(action);
+      // 将恢复后的全量歌曲写回数据库，并弹出历史记录
+      await api.importSongs(restoredSongs).catch(e => console.error('undo importSongs error', e));
+      await api.popHistory().catch(e => console.error('undo popHistory error', e));
+      return;
+    }
+
+    // 其他 action 先更新状态
+    baseDispatch(action);
+
+    // 然后同步数据库
+    switch (action.type) {
+      case 'ADD_SONG':
+        api.addSong(action.payload).catch(e => console.error('addSong sync error', e));
+        break;
+      case 'UPDATE_SONG':
+        api.updateSong(action.payload).catch(e => console.error('updateSong sync error', e));
+        break;
+      case 'DELETE_SONG':
+        api.deleteSong(action.payload).catch(e => console.error('deleteSong sync error', e));
+        break;
+      case 'IMPORT_SONGS':
+        api.importSongs(action.payload).catch(e => console.error('importSongs sync error', e));
+        break;
+      case 'CLEAR_ALL':
+        api.clearAllSongs().catch(e => console.error('clearAllSongs sync error', e));
+        break;
+      case 'PUSH_HISTORY':
+        // PUSH_HISTORY action 传入 description 和 songs，同步写入 history 表
+        api.pushHistory({
+          id: Date.now(),
+          description: action.payload.description,
+          songs: action.payload.songs,
+          timestamp: Date.now(),
+        }).catch(e => console.error('pushHistory sync error', e));
+        break;
+      // LOAD_SONGS / LOAD_HISTORY 无需同步
+    }
+  }, [baseDispatch]);
+
+  // 初始化：从 Supabase（加 localStorage 兜底）加载歌曲与历史
   useEffect(() => {
-    saveSongs(state.songs);
+    async function initialize() {
+      try {
+        // 歌曲
+        const songs = await loadSongs();
+        baseDispatch({ type: 'LOAD_SONGS', payload: songs });
+        // 历史
+        const history = await api.fetchHistory();
+        baseDispatch({ type: 'LOAD_HISTORY', payload: history });
+      } catch (e) {
+        console.error('初始化数据失败', e);
+      }
+    }
+    initialize();
+  }, [baseDispatch]);
+
+  // 原有的 saveSongs 已改为空实现，无需再监听 songs 变化写入本地
+  // 但我们保留该 useEffect 以表明逻辑清晰，实际不执行写入
+  useEffect(() => {
+    // 数据已实时同步到 Supabase，此处不再调用 saveSongs
   }, [state.songs]);
 
   const saveSong = useCallback(() => {
@@ -174,19 +251,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'ADD_SONG', payload: song });
     }
     dispatch({ type: 'RESET_FORM' });
-  }, [state.form, state.isEditing, state.editingId]);
+  }, [state.form, state.isEditing, state.editingId, dispatch]);
 
   const deleteSong = useCallback((id: number) => {
     dispatch({ type: 'DELETE_SONG', payload: id });
-  }, []);
+  }, [dispatch]);
 
   const cancelEdit = useCallback(() => {
     dispatch({ type: 'RESET_FORM' });
-  }, []);
+  }, [dispatch]);
 
   const undo = useCallback(() => {
     dispatch({ type: 'UNDO' });
-  }, []);
+  }, [dispatch]);
 
   return (
     <AppContext.Provider value={{ state, dispatch, saveSong, deleteSong, cancelEdit, undo }}>

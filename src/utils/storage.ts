@@ -1,21 +1,41 @@
 import type { Song } from '../types';
+import { fetchSongs } from '../lib/api'; // 新增引用
 
 const STORAGE_KEY = 'jay_score_v2';
 const LEGACY_KEY = 'jay_chou_scores';
 
-export function loadSongs(): Song[] {
+// 现改为从 Supabase 异步加载，若数据库为空则回退到 localStorage
+export async function loadSongs(): Promise<Song[]> {
   try {
-    const data = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
+    const remoteSongs = await fetchSongs();
+    if (remoteSongs.length > 0) {
+      return remoteSongs;
+    }
+    // 数据库无数据，则尝试从 localStorage 加载旧数据作为兜底
+    const localData = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_KEY);
+    if (localData) {
+      const parsed = JSON.parse(localData) as Song[];
+      // 可选：将本地数据同步到 Supabase，此处只返回，后续正常使用时会逐步写入
+      return parsed;
+    }
     return [];
+  } catch (e) {
+    console.error('loadSongs 失败，尝试读取本地缓存', e);
+    try {
+      const data = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
   }
 }
 
+// 改为空操作，保留签名。数据同步已在操作 API 中进行
 export function saveSongs(songs: Song[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(songs));
+  // 数据已通过 api 实时写入 Supabase，此处不再写 localStorage
 }
 
+// 以下三个函数保持不变
 export function exportJSON(songs: Song[]): void {
   const blob = new Blob([JSON.stringify(songs, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
