@@ -5,7 +5,7 @@ import { calculateTotal, calculateTier } from '../../utils/scoring';
 import type { Song, DimensionScores } from '../../types';
 
 const K = 0.3;
-const D_PARAM = 30;
+const D_PARAM = 15;
 
 interface DeltaRecord {
   dimKey: string;
