@@ -30,18 +30,21 @@ function pickTwo(songs: Song[]): [Song, Song] {
 }
 
 function eloUpdate(aScore: number, bScore: number, winner: 'A' | 'B'): [number, number] {
-  const diff = winner === 'A' ? bScore - aScore : aScore - bScore;
-  const E = 1 / (1 + Math.pow(10, diff / D_PARAM));
+  const winnerScore = winner === 'A' ? aScore : bScore;
+  const loserScore  = winner === 'A' ? bScore : aScore;
+  // 胜者的预期胜率
+  const E_winner = 1 / (1 + Math.pow(10, (loserScore - winnerScore) / D_PARAM));
+  const delta = K * (1 - E_winner); // 胜者加分 ＝ 败者扣分
 
   if (winner === 'A') {
     return [
-      Math.min(100, Math.max(0, aScore + K * (1 - E))),
-      Math.min(100, Math.max(0, bScore - K * E)),
+      Math.min(100, Math.max(0, aScore + delta)),
+      Math.min(100, Math.max(0, bScore - delta)),
     ];
   } else {
     return [
-      Math.min(100, Math.max(0, aScore - K * E)),
-      Math.min(100, Math.max(0, bScore + K * (1 - E))),
+      Math.min(100, Math.max(0, aScore - delta)),
+      Math.min(100, Math.max(0, bScore + delta)),
     ];
   }
 }
