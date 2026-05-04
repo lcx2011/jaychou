@@ -1,5 +1,5 @@
 export type Tier = 'S' | 'A' | 'B' | 'C' | 'D';
-export type TabName = 'score' | 'rank' | 'charts' | 'compare' | 'data';
+export type TabName = 'score' | 'rank' | 'charts' | 'compare' | 'versus' | 'data';
 export type SortKey = 'total' | 'melody' | 'arrangement' | 'lyrics' | 'vocal' | 'innovation' | 'year' | 'name';
 
 export interface DimensionScores {

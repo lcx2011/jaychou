@@ -6,6 +6,7 @@ const TABS: { key: TabName; label: string; icon: string }[] = [
   { key: 'rank',    label: '排行榜',   icon: '🏆' },
   { key: 'charts',  label: '数据看板', icon: '📊' },
   { key: 'compare', label: '对比模式', icon: '⚔️' },
+  { key: 'versus',  label: '随机对决', icon: '🎲' },
   { key: 'data',    label: '数据管理', icon: '⚙️' },
 ];
 
